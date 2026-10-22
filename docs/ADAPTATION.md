@@ -88,7 +88,7 @@ Ubuntu 26.04 มี `nodejs` v22 อยู่แล้ว — เปลี่ย
 
 `proot-distro` ปฏิเสธการทำงานเมื่ออยู่ใน proot session อยู่แล้ว:
 
-```
+```text
 Error: attempted to run proot-distro in a proot session.
 Please check your system configuration to ensure that this program does not
 run under any other proot instance.

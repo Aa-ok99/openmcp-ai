@@ -56,7 +56,7 @@ Order findings by severity, highest first:
 
 Give each finding exactly these fields:
 
-```
+```markdown
 ### [Critical] Short imperative title
 `path/to/file.ts:42`
 What breaks and the input or state that triggers it, then the concrete fix.

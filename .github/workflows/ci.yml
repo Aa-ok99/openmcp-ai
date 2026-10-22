@@ -32,6 +32,9 @@ jobs:
       - name: Smoke tests
         run: bash tests/smoke.sh
 
+      - name: Markdown
+        run: npx --yes markdownlint-cli2 "*.md" "docs/*.md" "assets/**/*.md"
+
       - name: Validate config against the live schemas
         run: |
           python3 -m pip install --quiet --disable-pip-version-check jsonschema

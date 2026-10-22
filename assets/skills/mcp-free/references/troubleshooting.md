@@ -23,7 +23,7 @@ Match the error text, find the cause, apply the fix.
 
 A browser launch failure is reported as a generic error with the real cause embedded:
 
-```
+```text
 Error: async initializeServer: Target page, context or browser has been closed
 Browser logs:
 <launching> /root/.cache/ms-playwright/chromium-1247/chrome-linux-arm64/chrome ...
@@ -153,7 +153,7 @@ means the timeout is still too tight for this machine.
 A deprecated package still installs, still runs, and still connects. The only symptom is an npm
 warning on every launch, which is easy to miss in the MCP startup logs:
 
-```
+```text
 Connection closed: MCP server process exited with code 1: npm WARN deprecated
 @modelcontextprotocol/server-brave-search@0.6.2: Package no longer supported.
 ```
@@ -191,7 +191,7 @@ Replacements for the archived ones:
 
 Right after writing a project config, the first status read can come back empty:
 
-```
+```text
 No MCP servers configured
 ```
 

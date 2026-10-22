@@ -75,7 +75,7 @@ Do not skip step 2. It prevents the most common failure there is.
 
 5. **Verify the connection.** `opencode mcp list` prints one line per server:
 
-   ```
+   ```text
    ✓ filesystem  connected
    ○ slowish     pending
    ○ turned-off  disabled
