@@ -1,0 +1,61 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "update": "notify",
+  "formatter": true,
+  "compaction": {
+    "auto": true,
+    "keep": { "tokens": 20000 },
+    "buffer": 20000
+  },
+  "experimental": {
+    "todo": true
+  },
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "shell", "resource": "git reset --hard *", "effect": "ask" },
+    { "action": "shell", "resource": "rm -rf *", "effect": "ask" }
+  ],
+  "agents": {
+    "reviewer": {
+      "description": "Review changed code without editing any files",
+      "mode": "subagent",
+      "system": "Focus on correctness, security, and missing tests. Report findings as a concise list ordered by severity, each with a file path and line reference. Do not modify files.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+        { "action": "question", "resource": "*", "effect": "deny" }
+      ]
+    }
+  },
+  "commands": {
+    "review": {
+      "description": "Review the current diff for correctness, security, and missing tests",
+      "template": "Review the current diff for correctness, security issues, and missing tests. Use the reviewer agent. Report findings ordered by severity with file:line references. Do not edit files."
+    }
+  },
+  "mcp": {
+    "timeout": {
+      "startup": 120000,
+      "catalog": 60000,
+      "execution": 600000
+    },
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "@playwright/mcp",
+          "--browser",
+          "chromium",
+          "--headless",
+          "--no-sandbox",
+          "--isolated"
+        ]
+      },
+      "filesystem": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "{HOME}"]
+      }
+    }
+  }
+}

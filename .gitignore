@@ -1,0 +1,18 @@
+# logs
+*.log
+install.log
+
+# editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# os
+.DS_Store
+Thumbs.db
+
+# local overrides
+.env
+.env.*
+!.env.example
