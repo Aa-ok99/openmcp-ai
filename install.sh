@@ -21,6 +21,7 @@ DISTRO="${OPENMCP_DISTRO:-ubuntu}"
 DRY_RUN=0
 SKIP_MCP=0
 UNINSTALL=0
+PURGE=0
 
 # ---------- Arguments ----------
 while [ $# -gt 0 ]; do
@@ -47,7 +48,10 @@ done
 # Inside a container the Termux prefix is still visible, so check for the
 # proot session itself before trusting the prefix.
 self_root="$(readlink -f /proc/self/root 2>/dev/null || echo "")"
-if [ -n "$self_root" ] && printf '%s' "$self_root" | grep -q "proot-distro/containers"; then
+# OPENMCP_ASSUME_TERMUX=1 skips the probe; used by tests/smoke.sh so the
+# outer script can be exercised from inside the container.
+if [ "${OPENMCP_ASSUME_TERMUX:-0}" != "1" ] &&
+   [ -n "$self_root" ] && printf '%s' "$self_root" | grep -q "proot-distro/containers"; then
   echo "คุณอยู่ภายใน container อยู่แล้ว - ให้รันสคริปต์ชั้นในแทน:" >&2
   echo "    bash ${REPO_DIR:-~/.openmcp}/scripts/ubuntu-setup.sh" >&2
   exit 1
@@ -73,6 +77,15 @@ else
 fi
 CONTAINERS_DIR="$TERMUX_PREFIX/var/lib/proot-distro/containers"
 ROOTFS="$CONTAINERS_DIR/$DISTRO/rootfs"
+
+# Running from a clone? Use that clone instead of downloading a second copy.
+# `curl | bash` has no usable source path, so it falls through to ~/.openmcp.
+if [ -z "$REPO_DIR" ] && [ -n "${BASH_SOURCE[0]:-}" ]; then
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+  if [ -n "$script_dir" ] && [ -d "$script_dir/.git" ] && [ -f "$script_dir/scripts/lib/ui.sh" ]; then
+    REPO_DIR="$script_dir"
+  fi
+fi
 [ -n "$REPO_DIR" ] || REPO_DIR="$TERMUX_HOME/.openmcp"
 
 # The Termux home is bind-mounted into the container at the same path, so the
@@ -131,7 +144,11 @@ step "[0/6] ดึงโค้ด openmcp-ai"
 
 if [ -d "$REPO_DIR/.git" ]; then
   log "อัปเดต repo ที่ $REPO_DIR ..."
-  run git -C "$REPO_DIR" pull --ff-only origin "$REPO_BRANCH"
+  # A dirty tree or a missing remote must not abort the install - the code on
+  # disk is already good enough to run.
+  if ! run git -C "$REPO_DIR" pull --ff-only origin "$REPO_BRANCH"; then
+    warn "อัปเดต repo ไม่ได้ (มี local change หรือไม่มีเน็ต) - ใช้โค้ดที่มีอยู่"
+  fi
 else
   log "โคลน repo ลง $REPO_DIR ..."
   run git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$REPO_DIR"
@@ -195,7 +212,12 @@ fi
 step "[4/6] ตั้ง alias ฝั่ง Termux"
 
 if [ "$UNINSTALL" -eq 1 ]; then
-  run sed -i '/openmcp-ai \/ Termux aliases/,+4d' "$TERMUX_HOME/.bashrc"
+  if [ -f "$TERMUX_HOME/.bashrc" ]; then
+    # The marker block is exactly two lines: the comment and the `source`.
+    run sed -i '/^# openmcp-ai \/ Termux aliases$/,+1d' "$TERMUX_HOME/.bashrc"
+  fi
+  run rm -f "$TERMUX_HOME/.openmcp_aliases"
+  run rm -f "$TERMUX_HOME/u_root"
   ok "ถอด alias ฝั่ง Termux แล้ว"
 else
   write_file "$TERMUX_HOME/.openmcp_aliases" <<EOF
@@ -217,7 +239,8 @@ alias u-remove="proot-distro remove $DISTRO"
 
 # อัปเดต openmcp-ai
 alias openmcp-update="git -C $REPO_DIR pull --ff-only origin $REPO_BRANCH"
-alias openmcp-log="tail -f $TERMUX_HOME/.openmcp/install.log"
+alias openmcp-status="git -C $REPO_DIR log --oneline -1"
+alias openmcp-dir="cd $REPO_DIR"
 EOF
   chmod +x "$TERMUX_HOME/.openmcp_aliases" 2>/dev/null || true
 

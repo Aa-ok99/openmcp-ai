@@ -60,17 +60,22 @@ step() { echo -e "\n${YELLOW}>>> $*${NC}"; }
 info() { echo -e "${DIM}   $*${NC}"; }
 
 # Framed banner. The title is plain text; padding is computed from the real
-# display width so Thai text (double width) lines up correctly.
+# display width so Thai text lines up correctly.
 BANNER_WIDTH=42
 
+# Approximate terminal column width. Thai base characters occupy one column
+# and Thai combining marks (vowel signs, tone marks) occupy none - treating
+# every Thai codepoint as double width made the banner overrun its border.
 display_width() {
   local s="$1" w=0 i ch code
   local LC_ALL=C.UTF-8
   for ((i = 0; i < ${#s}; i++)); do
     ch="${s:i:1}"
     printf -v code "%d" "'$ch" 2>/dev/null || code=0
-    if (( code >= 0x0E00 && code <= 0x0E7F )); then
-      w=$((w + 2))
+    # Thai zero-width marks: MAI HAN-AKAT, vowel signs above/below, tone
+    # marks. U+0E32 (SARA AA) and U+0E33 (SARA AM) are spacing - width 1.
+    if (( code == 0x0E31 || (code >= 0x0E34 && code <= 0x0E3A) || (code >= 0x0E47 && code <= 0x0E4E) )); then
+      continue
     elif (( code >= 0x1F300 && code <= 0x1FAFF )); then
       w=$((w + 2))
     else
@@ -83,12 +88,17 @@ display_width() {
 banner() {
   local title="$1"
   local width="$BANNER_WIDTH"
-  local pad=$(( width - $(display_width "$title") ))
-  [ "$pad" -lt 0 ] && pad=0
+  local tw pad border
+  tw="$(display_width "$title")"
+  # Grow the box rather than letting a long title break the right edge.
+  [ $((tw + 2)) -gt "$width" ] && width=$((tw + 2))
+  pad=$((width - tw))
+  printf -v border '%*s' "$width" ''
+  border="${border// /═}"
   echo
-  printf "%b\n" "$(grad " ╔══════════════════════════════════════════╗")"
+  printf "%b\n" "$(grad " ╔${border}╗")"
   printf "%b\n" "$(grad " ║${title}$(printf '%*s' "$pad" '')║")"
-  printf "%b\n" "$(grad " ╚══════════════════════════════════════════╝")"
+  printf "%b\n" "$(grad " ╚${border}╝")"
   echo
 }
 
@@ -145,7 +155,6 @@ bar_run() {
   local pid=$!
 
   local width=28
-  local blocks='▢▣▤▥▦▧▨▩█'
   local i=0
 
   while kill -0 "$pid" >/dev/null 2>&1; do
@@ -182,14 +191,22 @@ bar_run() {
   return $status
 }
 
-# Print a summary table of installed components.
+# Print a summary table of installed components. Padding is computed from the
+# display width, not the byte length, so Thai labels line up with ASCII ones.
 summary_row() {
-  printf "  ${GREEN}%-22s${NC} %s\n" "$1" "$2"
+  local label="$1" value="$2" pad
+  pad=$(( 22 - $(display_width "$label") ))
+  [ "$pad" -lt 1 ] && pad=1
+  printf "  ${GREEN}%s${NC}%*s %s\n" "$label" "$pad" "" "$value"
 }
 
 # Confirm an action unless --yes was passed.
 confirm() {
   local prompt="$1"
+  # A dry run never changes anything, so there is nothing to confirm.
+  if [ "${DRY_RUN:-0}" -eq 1 ]; then
+    return 0
+  fi
   if [ "${OPENMCP_ASSUME_YES:-0}" = "1" ]; then
     return 0
   fi

@@ -97,8 +97,8 @@ if [ -f /etc/os-release ]; then
   fi
 fi
 
-if [ "$(id -u)" != "0" ]; then
-  err "ต้องรันด้วยสิทธิ์ root ภายใน container"
+if [ "$DRY_RUN" -eq 0 ] && [ "$VERIFY_ONLY" -eq 0 ] && [ "$(id -u)" != "0" ]; then
+  err "ต้องรันด้วยสิทธิ์ root ภายใน container (ยกเว้น --dry-run / --verify-only)"
   exit 1
 fi
 
@@ -130,14 +130,19 @@ fi
 if [ "$UNINSTALL" -eq 1 ]; then
   banner "openmcp-ai :: ถอนการติดตั้ง"
 
-    step "[1/5] ถอน MCP servers และ skills"
+  step "[1/5] ถอน MCP servers และ skills"
   if [ -f "$REPO_ROOT/scripts/mcp-setup.sh" ]; then
-    run bash "$REPO_ROOT/scripts/mcp-setup.sh" --uninstall
+    un_args=("--uninstall")
+    [ "$DRY_RUN" -eq 1 ] && un_args+=("--dry-run")
+    run bash "$REPO_ROOT/scripts/mcp-setup.sh" "${un_args[@]}"
   fi
 
   step "[2/5] ถอน alias และ cheat sheet"
   run rm -f "$HOME/.opencode_aliases" "$HOME/OPCODE-CHEATSHEET.txt"
-  run sed -i '/openmcp-ai \/ Ubuntu aliases/,+2d' "$HOME/.bashrc" 2>/dev/null || true
+  if [ -f "$HOME/.bashrc" ]; then
+    # Two-line marker block: the comment and the `source` line.
+    run sed -i '/^# openmcp-ai \/ Ubuntu aliases$/,+1d' "$HOME/.bashrc"
+  fi
   ok "ลบ alias และ cheat sheet แล้ว"
 
   if [ "$PURGE" -eq 1 ]; then
@@ -153,16 +158,18 @@ if [ "$UNINSTALL" -eq 1 ]; then
   fi
 
   step "[4/5] ตรวจสอบผล"
-  if [ -f "$HOME/.opencode_aliases" ]; then
-    warn "alias ยังอยู่"
-  else
-    ok "alias ถูกถอนแล้ว"
+  if [ "$DRY_RUN" -eq 0 ]; then
+    if [ -f "$HOME/.opencode_aliases" ]; then
+      warn "alias ยังอยู่"
+    else
+      ok "alias ถูกถอนแล้ว"
+    fi
   fi
 
   step "[5/5] สรุป"
   ok "ถอนการติดตั้งของ openmcp-ai เสร็จแล้ว"
   echo -e "  ${DIM}แพ็กเกจระบบของ Ubuntu ไม่ได้ถูกแตะ - ถ้าต้องการ${NC}"
-  echo -e "  ${BLUE}apt remove nodejs-lts${NC}"
+  echo -e "  ${BLUE}apt remove nodejs${NC}"
   echo
   exit 0
 fi
@@ -185,12 +192,23 @@ ok "แพ็กเกจระบบพร้อม"
 # ==========================================
 step "[2/6] ตรวจสอบ Node.js และ npm"
 
+# Claude Code requires Node >= 22. Ubuntu 26.04 ships Node 22 through the
+# `nodejs` package. There is no `nodejs-lts` package on Ubuntu - apt would
+# fail with "Unable to locate package" and abort the whole install.
+MIN_NODE_MAJOR=22
+
+node_major() {
+  node -v 2>/dev/null | sed -E 's/^v([0-9]+)\..*/\1/' | grep -E '^[0-9]+$' || echo 0
+}
+
 if have node && have npm; then
   ok "Node.js มีอยู่แล้ว: $(node -v)  npm: $(npm -v)"
 else
-  warn "ไม่พบ Node.js - ติดตั้ง nodejs-lts ผ่าน apt"
-  run apt-get install -y -qq nodejs-lts
-  if have node; then
+  warn "ไม่พบ Node.js - ติดตั้ง nodejs + npm ผ่าน apt"
+  run apt-get install -y -qq nodejs npm
+  if [ "$DRY_RUN" -eq 1 ]; then
+    info "[dry-run] ข้ามการตรวจสอบ Node.js หลังติดตั้ง"
+  elif have node; then
     ok "ติดตั้ง Node.js แล้ว: $(node -v)"
   else
     err "ติดตั้ง Node.js ไม่สำเร็จ"
@@ -198,12 +216,29 @@ else
   fi
 fi
 
-# npm global ไปที่ /usr/local เพื่อให้อยู่ใน PATH ของทุก user
-if [ "$(npm config get prefix 2>/dev/null)" != "/usr/local" ]; then
-  log "ตั้ง npm prefix เป็น /usr/local ..."
-  run npm config set prefix /usr/local
+# A distro whose Node is older than v22 breaks Claude Code. Try NodeSource,
+# then carry on: OpenCode ships its own binary and does not need a new Node.
+if [ "$DRY_RUN" -eq 0 ] && have node && [ "$(node_major)" -lt "$MIN_NODE_MAJOR" ]; then
+  warn "Node $(node -v) เก่ากว่า v${MIN_NODE_MAJOR} - Claude Code ต้องใช้ v${MIN_NODE_MAJOR} ขึ้นไป"
+  log "ติดตั้ง Node.js ${MIN_NODE_MAJOR}.x จาก NodeSource ..."
+  if run_soft bash -c "curl -fsSL https://deb.nodesource.com/setup_${MIN_NODE_MAJOR}.x | bash -" \
+     && run_soft apt-get install -y -qq nodejs; then
+    ok "อัปเกรด Node.js แล้ว: $(node -v)"
+  else
+    warn "อัปเกรด Node.js ไม่สำเร็จ - OpenCode ยังใช้ได้ แต่ Claude Code จะรันไม่ได้"
+  fi
 fi
-ok "npm prefix: $(npm config get prefix)"
+
+# npm global ไปที่ /usr/local เพื่อให้อยู่ใน PATH ของทุก user
+if [ "$DRY_RUN" -eq 1 ]; then
+  info "[dry-run] npm prefix -> /usr/local"
+else
+  if [ "$(npm config get prefix 2>/dev/null)" != "/usr/local" ]; then
+    log "ตั้ง npm prefix เป็น /usr/local ..."
+    run npm config set prefix /usr/local
+  fi
+  ok "npm prefix: $(npm config get prefix)"
+fi
 
 # ==========================================
 #  Step 3 - Bun (ทางเลือก - proot บางครั้งรันไม่ได้)
@@ -220,10 +255,10 @@ else
     echo -e "${DIM}[dry-run]${NC} curl -fsSL https://bun.sh/install | bash"
   fi
   export PATH="$HOME/.bun/bin:$PATH"
-  if have bun && bun -v >/dev/null 2>&1; then
-    ok "ติดตั้ง Bun แล้ว: $(bun -v)"
-  elif [ "$DRY_RUN" -eq 1 ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
     info "[dry-run] จะข้าม Bun ถ้าติดตั้งแล้วยังรันไม่ได้ใน proot"
+  elif have bun && bun -v >/dev/null 2>&1; then
+    ok "ติดตั้ง Bun แล้ว: $(bun -v)"
   else
     warn "Bun ใช้งานไม่ได้ใน proot - ข้ามไปก่อน (ไม่กระทบ OpenCode)"
   fi
@@ -242,11 +277,15 @@ if have opencode; then
   ok "OpenCode มีอยู่แล้ว: $(opencode --version 2>/dev/null || echo '?')"
   if confirm "อัปเดต OpenCode เป็นเวอร์ชันล่าสุด?"; then
     run npm install -g "$OPENCODE_PKG@latest"
-    ok "อัปเดต OpenCode แล้ว: $(opencode --version 2>/dev/null || echo '?')"
+    if [ "$DRY_RUN" -eq 0 ]; then
+      ok "อัปเดต OpenCode แล้ว: $(opencode --version 2>/dev/null || echo '?')"
+    fi
   fi
 else
   run npm install -g "$OPENCODE_PKG@latest"
-  if have opencode; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    info "[dry-run] ข้ามการตรวจสอบ OpenCode หลังติดตั้ง"
+  elif have opencode; then
     ok "ติดตั้ง OpenCode แล้ว: $(opencode --version 2>/dev/null || echo '?')"
   else
     err "ติดตั้ง OpenCode ไม่สำเร็จ"
@@ -258,11 +297,15 @@ if have claude; then
   ok "Claude Code มีอยู่แล้ว: $(claude --version 2>/dev/null || echo '?')"
   if confirm "อัปเดต Claude Code เป็นเวอร์ชันล่าสุด?"; then
     run npm install -g "$CLAUDE_PKG@latest"
-    ok "อัปเดต Claude Code แล้ว"
+    if [ "$DRY_RUN" -eq 0 ]; then
+      ok "อัปเดต Claude Code แล้ว: $(claude --version 2>/dev/null || echo '?')"
+    fi
   fi
 else
   run npm install -g "$CLAUDE_PKG@latest"
-  if have claude; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    info "[dry-run] ข้ามการตรวจสอบ Claude Code หลังติดตั้ง"
+  elif have claude; then
     ok "ติดตั้ง Claude Code แล้ว: $(claude --version 2>/dev/null || echo '?')"
   else
     warn "ติดตั้ง Claude Code ไม่สำเร็จ - ข้ามไปก่อน"
@@ -277,7 +320,11 @@ step "[5/6] ติดตั้ง MCP servers และ skills"
 if [ "$SKIP_MCP" -eq 1 ]; then
   warn "ข้ามการติดตั้ง MCP (--skip-mcp)"
 else
-  run bash "$REPO_ROOT/scripts/mcp-setup.sh"
+  mcp_args=()
+  # `run` skips execution in dry-run, so this only matters when the caller
+  # runs mcp-setup.sh directly - still, keep the plan honest about the flag.
+  [ "$DRY_RUN" -eq 1 ] && mcp_args+=("--dry-run")
+  run bash "$REPO_ROOT/scripts/mcp-setup.sh" "${mcp_args[@]}"
 fi
 
 # ==========================================

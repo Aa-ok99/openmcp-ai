@@ -29,7 +29,8 @@
   "commands": {
     "review": {
       "description": "Review the current diff for correctness, security, and missing tests",
-      "template": "Review the current diff for correctness, security issues, and missing tests. Use the reviewer agent. Report findings ordered by severity with file:line references. Do not edit files."
+      "agent": "reviewer",
+      "template": "Review the current diff for correctness, security issues, and missing tests. Report findings ordered by severity with file:line references. Do not edit files."
     }
   },
   "mcp": {

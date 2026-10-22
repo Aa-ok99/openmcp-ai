@@ -15,9 +15,13 @@ bash ~/.openmcp/scripts/ubuntu-setup.sh
 **ตรวจว่าอยู่ฝั่งไหน**:
 
 ```bash
-[ -f /.dockerenv ] && echo container || echo termux
-cat /etc/os-release | grep ^ID=
+readlink -f /proc/self/root
 ```
+
+- ได้ `.../proot-distro/containers/<ชื่อ>/rootfs` → อยู่ **ใน container**
+- ได้ `/` → อยู่ฝั่ง **Termux**
+
+อย่าใช้ `/.dockerenv` เช็ค — proot ไม่ได้สร้างไฟล์นั้น
 
 ---
 
@@ -100,6 +104,30 @@ bash ~/.config/opencode/skills/mcp-free/scripts/check-mcp.sh ~   # จับเ�
 **สาเหตุ** — Bun ใช้ syscall ที่ proot รองรับไม่ครบ
 
 **แก้** — ไม่เป็นไร สคริปต์จะข้ามให้เองแล้วแจ้ง warning OpenCode ใช้ Node.js เป็นพื้นฐาน ไม่ต้องมี Bun
+
+---
+
+## `claude` รันไม่ขึ้น หรือติด `EBADENGINE`
+
+**สาเหตุ** — Claude Code บังคับ Node.js **v22 ขึ้นไป** ถ้า Node เก่ากว่า จะติดตั้งผ่านแต่รันจริงไม่ได้
+(มักเจอบน Ubuntu รุ่นเก่าที่ `apt` ให้ Node 18/20 มา)
+
+**ตรวจสอบ**
+
+```bash
+node -v
+```
+
+**แก้** — ติดตั้ง Node 22 จาก NodeSource:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y nodejs
+node -v
+```
+
+`scripts/ubuntu-setup.sh` เช็คเรื่องนี้ให้อัตโนมัติและดันเวอร์ชันให้ ถ้าอัปเกรดไม่สำเร็จจะเตือน
+แต่ไม่หยุดทั้งการติดตั้ง — OpenCode ยังใช้ได้เพราะไม่ต้องพึ่ง Node เวอร์ชันใหม่
 
 ---
 

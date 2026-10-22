@@ -42,7 +42,7 @@ for candidate in "opencode.json" "opencode.jsonc" ".opencode/opencode.json" ".op
 done
 
 LIST=""
-for attempt in 1 2 3; do
+for _ in 1 2 3; do
   LIST=$(opencode mcp list 2>&1)
   if ! printf '%s' "$LIST" | grep -q "No MCP servers configured"; then
     break
@@ -63,6 +63,8 @@ echo
 CONNECTED=$(printf '%s\n' "$LIST" | grep -c '^✓' || true)
 PENDING=$(printf '%s\n' "$LIST" | grep -c '^○' || true)
 DISABLED=$(printf '%s\n' "$LIST" | grep -cE '^○.*[[:space:]]disabled$' || true)
+# A disabled server also prints the pending glyph - do not count it twice.
+PENDING=$((PENDING - DISABLED))
 FAILED=$(printf '%s\n' "$LIST" | grep -c '^✗' || true)
 echo "connected: $CONNECTED   pending: $PENDING   failed: $FAILED   disabled: $DISABLED"
 echo

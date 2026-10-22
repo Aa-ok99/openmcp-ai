@@ -28,7 +28,7 @@
 | --- | --- |
 | **OpenCode AI** | `@opencode/cli` (แพ็กเกจปัจจุบัน) ติดตั้งแบบ global |
 | **Claude Code** | `@anthropic-ai/claude-code` |
-| **Node.js + npm** | ตรวจสอบก่อน ถ้ายังไม่มีค่อยติดตั้งผ่าน `apt` |
+| **Node.js + npm** | ตรวจสอบก่อน ถ้ายังไม่มีค่อยติดตั้งผ่าน `apt` — ต้องเป็น **v22 ขึ้นไป** เพราะ Claude Code บังคับ (ถ้าเก่ากว่าจะดันผ่าน NodeSource ให้อัตโนมัติ) |
 | **Bun** | ติดตั้งจาก `bun.sh` (ข้ามอัตโนมัติถ้ารันใน proot ไม่ได้) |
 | **MCP servers** | `filesystem` + `playwright` (headless chromium) |
 | **OpenCode config** | `opencode.json` + `cli.json` + permission rules |
@@ -118,11 +118,12 @@ bash ~/.config/opencode/skills/mcp-free/scripts/check-mcp.sh ~
 ## ⚙️ ตัวเลือก
 
 ```bash
-install.sh --dry-run       # แสดงแผนทั้งหมดโดยไม่แตะระบบ
+install.sh --dry-run       # แสดงแผนทั้งหมดโดยไม่แตะระบบ (ไม่ต้อง root)
 install.sh --skip-mcp      # ข้าม MCP servers และ skills
 install.sh --uninstall     # ถอน config, skills, aliases, cheatsheet
 install.sh --uninstall --purge   # ถอนด้วย OpenCode, Claude Code และ Bun
 install.sh --distro ubuntu # ระบุ distro อื่น
+install.sh --repo-dir DIR  # ใช้ repo ที่ clone ไว้แล้ว แทน ~/.openmcp
 ```
 
 ตัวแปรสภาพแวดล้อม: `OPENMCP_DIR` (ตำแหน่งโค้ด), `OPENMCP_DISTRO`, `OPENMCP_ASSUME_YES`, `NO_COLOR`
@@ -142,10 +143,42 @@ openmcp-ai/
 │   ├── opencode.json          เทมเพลต config
 │   ├── cli.json               เทมเพลต TUI
 │   └── skills/                code-review, mcp-free
-└── docs/
-    ├── TROUBLESHOOTING.md
-    └── ADAPTATION.md          สิ่งที่เปลี่ยนจากต้นฉบับ debian--ai
+├── tests/
+│   └── smoke.sh               ชุดทดสอบ (ไม่ต้องใช้มือถือ)
+├── docs/
+│   ├── TROUBLESHOOTING.md
+│   └── ADAPTATION.md          สิ่งที่เปลี่ยนจากต้นฉบับ debian--ai
+└── .github/workflows/ci.yml   ShellCheck + smoke tests บน GitHub
 ```
+
+---
+
+## 🧪 ทดสอบ
+
+ไม่ต้องมีมือถือก็เช็คได้ — ทุกอย่างรันใน HOME ชั่วคราว ไม่แตะระบบจริง:
+
+```bash
+bash tests/smoke.sh
+```
+
+ตรวจให้ครบทุกจุด: ทุกสคริปต์ parse ผ่าน, JSON valid, `--dry-run` ไม่เขียนอะไรลงดิสก์,
+`--uninstall` ไม่กินบรรทัดอื่นใน `.bashrc`, banner ตรงกรอบแม้มีข้อความไทย,
+และแพ็กเกจที่ไม่มีอยู่จริง (`nodejs-lts`) ไม่หลุดกลับมา
+
+ตรวจ config กับ schema จริงของ OpenCode ด้วย (ต้องมีเน็ต + `jsonschema`):
+
+```bash
+SMOKE_SCHEMA=1 bash tests/smoke.sh
+```
+
+Lint ด้วย ShellCheck:
+
+```bash
+shellcheck -x -S warning install.sh scripts/*.sh scripts/lib/*.sh \
+  assets/skills/*/scripts/*.sh tests/smoke.sh
+```
+
+CI รันทั้งสองอย่างให้อัตโนมัติทุก push ที่ `main`
 
 ---
 

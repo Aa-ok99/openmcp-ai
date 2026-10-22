@@ -51,25 +51,54 @@ run() {
 # ==========================================
 if [ "$UNINSTALL" -eq 1 ]; then
   # No step header here - the caller prints its own.
-  if [ -f "$CONFIG_DIR/opencode.json" ]; then
-    cp "$CONFIG_DIR/opencode.json" "$CONFIG_DIR/opencode.json.bak"
-    python3 - "$CONFIG_DIR/opencode.json" <<'PY' 2>/dev/null || true
-import json, sys
+  for cfg in "$CONFIG_DIR/opencode.json" "$CONFIG_DIR/opencode.jsonc"; do
+    [ -f "$cfg" ] || continue
+    if [ "$DRY_RUN" -eq 1 ]; then
+      echo -e "${DIM}[dry-run]${NC} ลบบล็อก \"mcp\" ออกจาก $cfg"
+      continue
+    fi
+    cp "$cfg" "$cfg.bak"
+    if python3 - "$cfg" <<'PY'
+import json, os, sys
+
 path = sys.argv[1]
-with open(path, encoding="utf-8") as fh:
-    cfg = json.load(fh)
+try:
+    with open(path, encoding="utf-8") as fh:
+        cfg = json.load(fh)
+except Exception as exc:              # JSONC or a broken file
+    print(f"parse error: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+if not isinstance(cfg, dict) or "mcp" not in cfg:
+    sys.exit(3)
+
 cfg.pop("mcp", None)
-with open(path, "w", encoding="utf-8") as fh:
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as fh:
     json.dump(cfg, fh, indent=2, ensure_ascii=False)
     fh.write("\n")
+os.replace(tmp, path)
 PY
-    ok "ลบบล็อก mcp ออกจาก opencode.json (สำรองไว้ที่ opencode.json.bak)"
-  fi
+    then
+      ok "ลบบล็อก mcp ออกจาก $cfg (สำรองไว้ที่ $cfg.bak)"
+    else
+      status=$?
+      if [ "$status" -eq 3 ]; then
+        info "ไม่พบบล็อก mcp ใน $cfg - ไม่ต้องแก้"
+      else
+        warn "แก้ $cfg อัตโนมัติไม่ได้ (JSONC?) - ลบบล็อก \"mcp\" เอง (สำรองไว้ที่ $cfg.bak)"
+      fi
+    fi
+  done
 
   for skill in code-review mcp-free; do
     if [ -d "$SKILLS_DIR/$skill" ]; then
-      rm -rf "$SKILLS_DIR/$skill"
-      ok "ลบ skill '$skill'"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        echo -e "${DIM}[dry-run]${NC} ลบ skill '$skill'"
+      else
+        rm -rf "${SKILLS_DIR:?}/$skill"
+        ok "ลบ skill '$skill'"
+      fi
     fi
   done
   exit 0

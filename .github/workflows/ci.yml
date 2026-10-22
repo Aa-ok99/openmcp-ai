@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: shell + config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck
+        env:
+          LC_ALL: C.UTF-8
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck -x -S warning \
+            install.sh \
+            scripts/*.sh \
+            scripts/lib/*.sh \
+            assets/skills/*/scripts/*.sh \
+            tests/smoke.sh
+
+      - name: Smoke tests
+        run: bash tests/smoke.sh
+
+      - name: Validate config against the live schemas
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check jsonschema
+          SMOKE_SCHEMA=1 bash tests/smoke.sh

@@ -37,13 +37,47 @@
 
 ---
 
+## 🩹 บั๊กที่เจอตอนพอร์ต (แก้แล้ว)
+
+### 1. `nodejs-lts` ไม่มีอยู่จริงบน Ubuntu
+
+`apt-get install nodejs-lts` ตายด้วย *Unable to locate package* แล้ว `set -e` ปิดสคริปต์ทั้งตัว
+Ubuntu 26.04 มี `nodejs` v22 อยู่แล้ว — เปลี่ยนเป็น `nodejs npm` และเพิ่มการ์ดความสูง:
+ถ้า Node เก่ากว่า v22 จะดันผ่าน NodeSource เพราะ Claude Code บังคับ `>=22`
+
+### 2. `PURGE` ไม่ถูกนิยาม → `--uninstall` พัง
+
+`set -u` ทำให้ `[ "$PURGE" -eq 1 ]` ในเส้นทาง `--uninstall` ตายทันทีถ้าไม่ได้ส่ง `--purge` มาด้วย
+
+### 3. `sed` ตอนถอนกวาดบรรทัดเกิน
+
+`sed '/marker/,+4d'` ลบบล็อกที่ยาวแค่ 2 บรรทัด → กินบรรทัดของผู้ใช้ไป 2 บรรทัด
+เปลี่ยนเป็น `,+1d` และเช็คว่าไฟล์มีอยู่ก่อน
+
+### 4. `--dry-run` ตายถ้ายังไม่ได้ติดตั้งอะไร
+
+หลัง `run apt-get install` สคริปต์เช็ค `have node` จากระบบจริง → dry-run บนเครื่องเปล่าจึง `exit 1`
+เพิ่มการข้ามการตรวจสอบหลังติดตั้งเมื่อเป็น dry-run (และไม่ต้อง root สำหรับ `--dry-run` / `--verify-only`)
+
+### 5. กรอบ banner แตกกับข้อความไทย
+
+เดิมนับทุก codepoint ไทยเป็นความกว้าง 2 → บรรทัดหัวเรื่องล้นกรอบ
+ที่ถูกคือ Thai base = 1, สระ/วรรณยุกต์ซ้อน (Mn) = 0 — แต่ `า`/`ำ` เป็นสระมีระยะ ต้องนับ 1
+และ `banner()` ขยายกรอบเองถ้าหัวเรื่องยาวเกิน
+
+### 6. `blocks` เป็น dead code
+
+ตัวแปรใน `bar_run()` ไม่เคยถูกใช้ — ลบทิ้ง (ShellCheck จับได้)
+
+---
+
 ## 🔄 การปรับให้รองรับ Ubuntu
 
 | มิติ | ต้นฉบับ | openmcp-ai |
 | --- | --- | --- |
 | distro | Debian | **Ubuntu 26.04** |
 | จุดเริ่มรัน | Termux → proot → Debian (ทั้งหมดในสคริปต์เดียว) | **แยก 2 ชั้น** — `install.sh` (Termux) + `ubuntu-setup.sh` (ใน container) |
-| Node.js | NVM v0.40.1 + `nvm install node` | **ตรวจของเดิมก่อน** ถ้าขาดค่อย `apt install nodejs-lts` |
+| Node.js | NVM v0.40.1 + `nvm install node` | **ตรวจของเดิมก่อน** ถ้าขาดค่อย `apt install nodejs npm` (ไม่มีแพ็กเกจ `nodejs-lts` บน Ubuntu) + ดันเป็น v22 ผ่าน NodeSource ถ้าเก่าเกิน |
 | npm global | ไม่กำหนด (ได้ root ของ user ปัจจุบัน) | บังคับ `npm config set prefix /usr/local` ให้อยู่ใน PATH ของทุก user |
 | aliases | ทั้งหมด wrap ผ่าน `proot-distro login debian` | **native ใน Ubuntu** — ไม่ต้องผ่าน proot อีก |
 | Claude Code | `@gitlawb/openclaude` | **`@anthropic-ai/claude-code`** (แพ็กเกจทางการ) |
